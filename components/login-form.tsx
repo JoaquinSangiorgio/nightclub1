@@ -57,7 +57,7 @@ export function LoginForm() {
               <Martini className="w-8 h-8 text-black" />
             </div>
             <h1 className="text-3xl font-black tracking-tighter text-white italic uppercase">
-              NIGHT<span className="text-amber-500 not-italic">CLUB</span>
+              Club<span className="text-amber-500 not-italic">Night</span>
             </h1>
             <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Inventory Suite v2.0</p>
           </div>

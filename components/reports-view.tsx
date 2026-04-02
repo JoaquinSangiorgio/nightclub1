@@ -1,239 +1,313 @@
 'use client'
 
-import { useState } from 'react'
-import { getReportDataCloud, getBottles } from '@/lib/store'
-import { 
-  FileText, 
-  Download, 
-  Calendar,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  BarChart3,
-  Activity,
-  Loader2
+import { useState, useEffect } from 'react'
+import { getReportDataCloud } from '@/lib/store'
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart as RePie, Pie, Cell, BarChart, Bar, Legend
+} from 'recharts'
+
+import {
+  Calendar, TrendingUp, TrendingDown, Activity,
+  Loader2, Clock, Layers, Wine,
+  ArrowUpRight, Percent, ChevronRight, ShoppingCart, BarChart3, User, DollarSign, Filter, Wallet
 } from 'lucide-react'
 
-const CATEGORIES_LABELS: Record<string, string> = {
-  whisky: 'Whisky',
-  vodka: 'Vodka',
-  ron: 'Licores',
-  tequila: 'Tequila',
-  gin: 'Gin',
-  cerveza: 'Cerveza',
-  vino: 'Vino',
-  champagne: 'Champagne',
-  otros: 'Otros',
-}
+const COLORS = ['#6366f1', '#a855f7', '#ec4899', '#10b981', '#f59e0b']
 
 export function ReportsView() {
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date()
-    date.setMonth(date.getMonth() - 1)
-    return date.toISOString().split('T')[0]
-  })
+  const [activeTab, setActiveTab] = useState<'metrics' | 'audit'>('metrics')
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [reportData, setReportData] = useState<any | null>(null)
+  const [startTime, setStartTime] = useState('00:00')
+  const [endTime, setEndTime] = useState('23:59')
+  const [reportData, setReportData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
   const generateReport = async () => {
     setLoading(true)
-    const start = new Date(startDate)
-    start.setHours(0, 0, 0, 0)
-    const end = new Date(endDate)
-    end.setHours(23, 59, 59, 999)
+    try {
+      const start = new Date(startDate + 'T00:00:00')
+      const end = new Date(endDate + 'T23:59:59')
+      const data = await getReportDataCloud(start, end)
+      setReportData(data)
+    } catch (e) {
+      console.error("Error en reporte:", e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { generateReport() }, [startDate, endDate])
+
+  const getProcessedData = () => {
+    if (!reportData) return { trend: [], hourly: [], stats: { revenue: 0, cost: 0, profit: 0, margin: 0 } }
     
-    const data = await getReportDataCloud(start, end)
-    setReportData(data)
-    setLoading(false)
+    const salesOnly = reportData.movements?.filter((m: any) => m.type === 'Venta') || []
+    
+    const totalRevenue = Number(reportData.totalRevenue || 0)
+    const totalCost = Number(reportData.totalCost || 0)
+    const profit = totalRevenue - totalCost
+    const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0
+
+    // Gráfico Horario
+    const hourMap: Record<string, number> = {}
+    salesOnly.forEach((m: any) => {
+      const date = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt)
+      const h = `${date.getHours().toString().padStart(2, '0')}:00`
+      hourMap[h] = (hourMap[h] || 0) + Number(m.cantidad)
+    })
+    const hourly = Object.entries(hourMap).map(([hour, ventas]) => ({ hour, ventas })).sort((a,b) => a.hour.localeCompare(b.hour))
+
+    // Tendencia Mixta (Acumulando Unidades y Dinero)
+    let totalAcc = 0
+    let moneyAcc = 0
+    const trend = salesOnly
+      .sort((a:any, b:any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+      .map((m: any) => {
+        totalAcc += Number(m.cantidad || 0)
+        moneyAcc += (Number(m.cantidad || 0) * Number(m.precioVenta || 0))
+        
+        const date = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt)
+        return {
+          time: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          acumulado: totalAcc,
+          dinero: moneyAcc
+        }
+      })
+
+    return { trend, hourly, stats: { revenue: totalRevenue, cost: totalCost, profit, margin } }
   }
 
-  const exportToCSV = () => {
-    if (!reportData) return
-    const headers = ['Producto', 'Unidades', 'Ingresos Generados']
-    const rows = reportData.salesByBottle.map((b: any) => [
-      b.name,
-      b.quantity,
-      b.revenue
-    ])
+  const { trend, hourly, stats } = getProcessedData()
 
-    const csvContent = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `reporte_ventas_${startDate}_a_${endDate}.csv`
-    link.click()
-  }
+  const pieData = Object.entries(reportData?.salesByCategory || {}).map(([name, value]) => ({
+    name: name.toString().toUpperCase(),
+    value: Number(value)
+  }))
 
-  const maxCategoryValue = reportData 
-    ? Math.max(...Object.values(reportData.salesByCategory as Record<string, number>), 1) 
-    : 1
+  const filteredAudit = reportData?.movements?.filter((m: any) => {
+    const date = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt)
+    const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+    return timeStr >= startTime && timeStr <= endTime
+  }) || []
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 font-rounded pb-10">
+    <div className="space-y-8 pb-10 animate-in fade-in duration-700 font-rounded">
       
-      {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6 px-2">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center shadow-xl shadow-indigo-600/20">
-            <FileText className="w-7 h-7 text-white" />
+          <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+            <BarChart3 className="text-white w-6 h-6" />
           </div>
-          <div>
-            <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">Análisis de Datos</h1>
-            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Inteligencia de Negocio</p>
+          <div className="flex bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 backdrop-blur-md">
+            <button onClick={() => setActiveTab('metrics')} className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'metrics' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Métricas</button>
+            <button onClick={() => setActiveTab('audit')} className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${activeTab === 'audit' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>Auditoría</button>
           </div>
         </div>
 
-        {/* FILTRO DE FECHAS */}
-        <div className="bg-slate-900/50 border-2 border-slate-800 p-2 rounded-[2rem] flex flex-col sm:flex-row items-center gap-2">
-          <div className="flex items-center gap-2 px-4">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="bg-transparent text-white font-bold text-sm outline-none border-none focus:ring-0 cursor-pointer"
-            />
-          </div>
-          <div className="h-6 w-[2px] bg-slate-800 hidden sm:block" />
-          <div className="flex items-center gap-2 px-4">
-            <Calendar className="w-4 h-4 text-slate-500" />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="bg-transparent text-white font-bold text-sm outline-none border-none focus:ring-0 cursor-pointer"
-            />
-          </div>
-          <button
-            onClick={generateReport}
-            disabled={loading}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white font-black px-6 py-3 rounded-[1.5rem] transition-all active:scale-95 text-xs uppercase flex items-center gap-2"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sincronizar'}
-          </button>
+        <div className="flex items-center gap-2 bg-slate-900/50 p-2 rounded-[2rem] border border-slate-800 shadow-xl text-white">
+           <Calendar className="w-4 h-4 text-indigo-500 ml-2" />
+           <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent font-black text-xs outline-none cursor-pointer" />
+           <ChevronRight className="w-4 h-4 text-slate-700" />
+           <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent font-black text-xs outline-none cursor-pointer" />
+           <button onClick={generateReport} className="bg-indigo-600 p-3 rounded-xl text-white active:scale-90 transition-all hover:bg-indigo-500">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
+           </button>
         </div>
       </div>
 
-      {reportData ? (
-        <>
-          {/* KPI CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: 'Unidades Vendidas', val: reportData.totalSales, icon: TrendingDown, color: 'text-rose-400' },
-              { label: 'Nuevos Ingresos', val: reportData.totalEntries, icon: TrendingUp, color: 'text-emerald-400' },
-              { label: 'Recaudación Est.', val: `$${reportData.totalRevenue.toLocaleString()}`, icon: DollarSign, color: 'text-indigo-400' },
-              { label: 'Mov. Totales', val: reportData.movements.length, icon: Activity, color: 'text-slate-400' }
-            ].map((kpi, i) => (
-              <div key={i} className="bg-slate-900/40 border-2 border-slate-800 p-6 rounded-[2rem] relative overflow-hidden group">
-                <kpi.icon className={`absolute -right-4 -bottom-4 w-20 h-20 opacity-5 group-hover:opacity-10 transition-opacity ${kpi.color}`} />
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-2">{kpi.label}</p>
-                <h3 className={`text-3xl font-black italic tracking-tighter ${kpi.color}`}>{kpi.val}</h3>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* VENTAS POR CATEGORÍA */}
-            <div className="bg-slate-900/20 border-2 border-slate-800 rounded-[2.5rem] p-8">
-              <h2 className="font-black text-white uppercase italic text-lg tracking-tight mb-8">Ventas por Categoría</h2>
-              <div className="space-y-6">
-                {Object.entries(reportData.salesByCategory as Record<string, number>).map(([cat, qty]) => (
-                  <div key={cat} className="space-y-2">
-                    <div className="flex justify-between text-xs font-bold uppercase tracking-widest">
-                      <span className="text-slate-400">{CATEGORIES_LABELS[cat] || cat}</span>
-                      <span className="text-white">{qty} uds.</span>
-                    </div>
-                    <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-indigo-600 rounded-full shadow-[0_0_15px_rgba(79,70,229,0.4)] transition-all duration-1000"
-                        style={{ width: `${(qty / maxCategoryValue) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* RANKING PRODUCTOS */}
-            <div className="bg-slate-900/20 border-2 border-slate-800 rounded-[2.5rem] p-8">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="font-black text-white uppercase italic text-lg tracking-tight">Ranking de Ventas</h2>
-                <button onClick={exportToCSV} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all text-slate-400 hover:text-white">
-                  <Download className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {reportData.salesByBottle.slice(0, 6).map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-slate-800 group hover:border-indigo-500/30 transition-all">
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs font-black text-slate-700 italic">#{i + 1}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-white uppercase tracking-tight truncate w-32 md:w-48">{item.name}</p>
-                        <p className="text-[10px] text-slate-600 font-bold">{item.quantity} unidades</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black text-emerald-400 italic leading-none">${item.revenue.toLocaleString()}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* AUDITORÍA */}
-          <div className="bg-slate-900/20 border-2 border-slate-800 rounded-[2.5rem] overflow-hidden">
-            <div className="p-8 border-b-2 border-slate-800">
-              <h2 className="font-black text-white uppercase italic text-lg tracking-tight">Auditoría de Movimientos</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-slate-950/50 border-b border-slate-800">
-                  <tr>
-                    <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Fecha</th>
-                    <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Botella</th>
-                    <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Tipo</th>
-                    <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Cantidad</th>
-                    <th className="p-6 text-[10px] font-black text-slate-500 uppercase tracking-widest">Operador</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {reportData.movements.slice(0, 15).map((m: any) => {
-                    const moveDate = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt);
-                    return (
-                      <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="p-6 text-sm text-slate-300 font-bold">{moveDate.toLocaleDateString()}</td>
-                        <td className="p-6 text-sm text-white font-black uppercase tracking-tighter">{m.nombreBotella}</td>
-                        <td className="p-6 text-center">
-                          <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${m.type === 'Entrada' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                            {m.type}
-                          </span>
-                        </td>
-                        <td className={`p-6 text-center text-lg font-black ${m.type === 'Entrada' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {m.type === 'Entrada' ? '+' : '-'}{m.cantidad}
-                        </td>
-                        <td className="p-6 text-sm text-slate-500 font-bold">{m.nombreUsuario}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-32 bg-slate-900/20 border-2 border-dashed border-slate-800 rounded-[3rem]">
-          {loading ? (
-            <Loader2 className="w-16 h-16 text-indigo-500 animate-spin" />
-          ) : (
-            <>
-              <BarChart3 className="w-16 h-16 text-slate-700 mb-6 opacity-20" />
-              <p className="text-slate-500 font-bold uppercase tracking-[0.2em] italic">Selecciona un rango para procesar los datos</p>
-            </>
-          )}
+      {loading && !reportData ? (
+        <div className="h-96 flex flex-col items-center justify-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-slate-500 font-black uppercase text-[10px] tracking-[0.3em]">Cargando Analytics...</p>
         </div>
-      )}
+      ) : reportData ? (
+        <>
+          {activeTab === 'metrics' ? (
+            <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
+              
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard label="Recaudación" value={`$${stats.revenue.toLocaleString()}`} icon={Wallet} color="text-emerald-400" sub="Ventas Brutas" />
+                <StatCard label="Inversión" value={`$${stats.cost.toLocaleString()}`} icon={TrendingDown} color="text-rose-400" sub="Costo de Almacén" />
+                <StatCard label="Ganancia Neta" value={`$${stats.profit.toLocaleString()}`} icon={TrendingUp} color="text-indigo-400" sub="Dinero Limpio" />
+                <StatCard label="Rentabilidad" value={`${stats.margin.toFixed(1)}%`} icon={Percent} color="text-purple-400" sub="Eficiencia" />
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                <ChartCard title="Tendencia de Despacho" sub="Unidades vs Recaudación acumulada">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={trend}>
+                      <defs>
+                        <linearGradient id="colorAcc" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorDinero" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="time" hide />
+                      <YAxis yAxisId="left" stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={10} axisLine={false} tickLine={false} tickFormatter={(val) => `$${val}`} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px' }}
+                        itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                        formatter={(value: any, name: string) => [
+                          name === 'dinero' ? `$${value.toLocaleString()}` : value, 
+                          name === 'dinero' ? 'Recaudado' : 'Unidades'
+                        ]}
+                      />
+                      <Area yAxisId="left" type="monotone" dataKey="acumulado" stroke="#6366f1" fill="url(#colorAcc)" strokeWidth={3} />
+                      <Area yAxisId="right" type="monotone" dataKey="dinero" stroke="#10b981" fill="url(#colorDinero)" strokeWidth={2} strokeDasharray="5 5" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <ChartCard title="Flujo de Cierre" sub="Volumen por hora">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={hourly}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                      <XAxis dataKey="hour" stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
+                      <YAxis stroke="#64748b" fontSize={10} axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{fill: '#1e293b', radius: 8}} contentStyle={{ backgroundColor: '#0f172a', border: 'none' }} />
+                      <Bar dataKey="ventas" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
+              </div>
+
+              <div className="grid lg:grid-cols-3 gap-6">
+                <ChartCard title="Mix de Venta" sub="Categorías">
+                  <ResponsiveContainer width="100%" height={250}>
+                    <RePie>
+                      <Pie data={pieData} innerRadius={60} outerRadius={80} paddingAngle={8} dataKey="value">
+                        {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold' }} />
+                    </RePie>
+                  </ResponsiveContainer>
+                </ChartCard>
+
+                <div className="lg:col-span-2 bg-[#0f172a]/40 border-2 border-slate-800/50 rounded-[2.5rem] p-8">
+                  <h2 className="text-white font-black uppercase italic text-lg mb-6 leading-none">Top Performance</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {reportData.salesByBottle?.slice(0, 6).map((item: any, i: number) => (
+                      <div key={i} className="bg-slate-900/50 p-5 rounded-[2rem] border border-slate-800 flex items-center justify-between group hover:border-indigo-500/50 transition-all">
+                        <div>
+                          <p className="text-xs font-black text-white uppercase italic">{item.name}</p>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase">{item.quantity} UDS.</p>
+                        </div>
+                        <p className="font-black text-emerald-400 text-lg">${Number(item.revenue || 0).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+               <div className="bg-slate-900/50 border-2 border-slate-800 p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xl text-white">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500"><Filter className="w-6 h-6" /></div>
+                    <div>
+                      <h2 className="font-black text-white uppercase italic text-lg leading-none tracking-tight">Registro de Turno</h2>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Filtrar franja horaria</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 bg-slate-800/50 p-2 rounded-2xl border border-slate-700">
+                    <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="bg-transparent font-black text-xs p-2 outline-none" />
+                    <span className="text-slate-600 font-black text-xs">AL</span>
+                    <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="bg-transparent font-black text-xs p-2 outline-none" />
+                  </div>
+               </div>
+               {/* TABLA DE AUDITORÍA CON COLUMNA DE USUARIO */}
+               <AuditTable movements={filteredAudit} />
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+// --- SUBCOMPONENTES ---
+
+function StatCard({ label, value, icon: Icon, color, sub }: any) {
+  return (
+    <div className="bg-[#0f172a]/60 border-2 border-slate-800/50 p-6 rounded-[2.2rem] relative overflow-hidden group shadow-xl">
+      <Icon className={`absolute -right-4 -bottom-4 w-20 h-20 opacity-5 ${color}`} />
+      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{label}</p>
+      <h2 className={`text-3xl font-black italic tracking-tighter ${color}`}>{value}</h2>
+      <p className="text-[9px] text-slate-600 font-bold uppercase mt-2 italic">{sub}</p>
+    </div>
+  )
+}
+
+function ChartCard({ title, sub, children }: any) {
+  return (
+    <div className="bg-[#0f172a]/40 border-2 border-slate-800/50 p-8 rounded-[2.5rem] shadow-2xl">
+      <div className="mb-6 text-left">
+        <h2 className="text-white font-black uppercase italic text-lg tracking-tight leading-none">{title}</h2>
+        <p className="text-[10px] text-slate-600 font-bold uppercase mt-1">{sub}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function AuditTable({ movements }: any) {
+  return (
+    <div className="bg-[#0f172a]/40 border-2 border-slate-800/50 rounded-[2.5rem] overflow-hidden">
+      <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        <h2 className="text-white font-black uppercase italic tracking-tight">Auditoría Detallada</h2>
+        <span className="text-[10px] bg-slate-800 text-slate-400 px-4 py-1.5 rounded-full font-black uppercase italic">
+          {movements.length} Registros
+        </span>
+      </div>
+      <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+        <table className="w-full text-left">
+          <thead className="sticky top-0 bg-[#111827] z-10">
+            <tr className="text-slate-500 text-[10px] font-black uppercase tracking-widest border-b border-slate-800">
+              <th className="p-5">Día / Hora</th>
+              <th className="p-5">Producto</th>
+              <th className="p-5">Usuario</th> {/* NUEVA COLUMNA */}
+              <th className="p-5 text-center">Tipo</th>
+              <th className="p-5 text-center">Cant.</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/40"> {movements.map((m: any, i: number) => {
+              const date = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt);
+              return (
+                <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                  <td className="p-5 text-[10px] font-bold text-slate-400 italic">
+                    {date.toLocaleDateString()} - {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </td>
+                  <td className="p-5 font-black text-white text-xs uppercase italic tracking-tight">{m.nombreBotella}</td>
+                  <td className="p-5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center text-indigo-400 font-black text-[8px]">BI</div>
+                      <span className="text-[10px] font-bold text-slate-300 uppercase">{m.nombreUsuario || 'SISTEMA'}</span>
+                    </div>
+                  </td>
+                  <td className="p-5 text-center">
+                    <span className={`text-[8px] font-black px-2 py-1 rounded-md uppercase ${m.type === 'Venta' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                      {m.type}
+                    </span>
+                  </td>
+                  <td className={`p-5 text-center font-black text-xl ${m.type === 'Venta' ? 'text-rose-500' : 'text-emerald-400'}`}>
+                    {m.type === 'Venta' ? '-' : '+'}{m.cantidad}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

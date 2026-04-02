@@ -26,7 +26,7 @@ interface SidebarProps {
 
 // Menú para Propietario: Acceso total
 const ownerMenuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'dashboard', label: 'Tablero', icon: LayoutDashboard },
   { id: 'inventory', label: 'Inventario', icon: Package },
   { id: 'entrada', label: 'Entradas', icon: Truck }, 
   { id: 'venta', label: 'Ventas', icon: Zap },       
@@ -36,7 +36,7 @@ const ownerMenuItems = [
 
 // Menú para Staff: Enfocado en la operación
 const employeeMenuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'inventory', label: 'Inventario', icon: Package },
   { id: 'entrada', label: 'Entradas', icon: Truck },
   { id: 'venta', label: 'Ventas', icon: Zap },
   { id: 'alerts', label: 'Alertas', icon: Bell },
@@ -86,8 +86,8 @@ export function Sidebar({ activeSection, onSectionChange, alertCount }: SidebarP
                 <Wine className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white tracking-tight leading-none">NightClub</h1>
-                <p className="text-[10px] text-slate-500 font-bold tracking-[0.2em] uppercase mt-1">Manager</p>
+                <h1 className="text-xl font-bold text-white tracking-tight leading-none">ClubNight</h1>
+               
               </div>
             </div>
             

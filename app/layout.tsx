@@ -6,7 +6,7 @@ import './globals.css'
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: 'NightClub Manager - Sistema de Gestion',
+  title: 'ClubNight Manager - Sistema de Gestion',
   description: 'Sistema de gestion de inventario para discotecas y clubes nocturnos',
   generator: 'v0.app',
   icons: {

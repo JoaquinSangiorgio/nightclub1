@@ -17,16 +17,16 @@ export function MainDashboard() {
   const { user } = useAuth()
 
   // 1. Convertimos refreshAlerts en ASYNC
-  const refreshAlerts = async () => {
-    try {
-      const alerts = await getAlerts() // Esperamos a Firebase
-      // Filtramos usando 'isRead' que es el nombre en tu DB
-      const unread = alerts.filter((a) => !a.isRead)
-      setAlertCount(unread.length)
-    } catch (error) {
-      console.error("Error al refrescar alertas:", error)
-    }
+ const refreshAlerts = async () => {
+  try {
+    const alerts = await getAlerts()
+    // Agregamos una validación para evitar errores si 'a' es null o no tiene la propiedad
+    const unread = alerts.filter((a: any) => a && a.isRead === false)
+    setAlertCount(unread.length)
+  } catch (error) {
+    console.error("Error al refrescar alertas:", error)
   }
+}
 
   useEffect(() => {
     // 2. Llamamos a la función asíncrona
@@ -40,9 +40,9 @@ export function MainDashboard() {
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return <DashboardView onNavigate={setActiveSection} />
+        return user?.role === 'owner' ? <DashboardView onNavigate={setActiveSection} /> : <InventoryView />
       case 'inventory':
-        return user?.role === 'owner' ? <InventoryView /> : <DashboardView onNavigate={setActiveSection} />
+        return <InventoryView /> 
       case 'entrada':
         return <EntranteView />
       case 'venta':

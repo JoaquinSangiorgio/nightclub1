@@ -5,8 +5,7 @@ import { auth, db } from './firebase'
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
-  signOut,
-  User as FirebaseUser 
+  signOut 
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { Usuario } from './types' 
@@ -25,28 +24,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Escucha cambios en la sesión (Login/Logout/Refresh)
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setIsLoading(true)
       if (firebaseUser) {
-        // 1. El usuario está autenticado, buscamos sus datos extras (Rol, Nombre) en Firestore
-        const userDoc = await getDoc(doc(db, 'usuarios', firebaseUser.uid))
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data()
-          setUser({
-            id: firebaseUser.uid,
-            username: firebaseUser.email || '',
-            role: userData.role || 'employee',
-            name: userData.name || 'Usuario'
-          })
-        } else {
-          // Si no tiene documento en Firestore, le damos un perfil básico
-          setUser({
-            id: firebaseUser.uid,
-            username: firebaseUser.email || '',
-            role: 'employee',
-            name: 'Nuevo Usuario'
-          })
+        try {
+          // Buscamos el documento del usuario en la colección 'usuarios'
+          const userDoc = await getDoc(doc(db, 'usuarios', firebaseUser.uid))
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            
+            setUser({
+              id: firebaseUser.uid,
+              username: firebaseUser.email || '',
+              role: userData.role || 'employee',
+              // Priorizamos 'nombre', luego 'name', y sino usamos el email como fallback
+              name: userData.nombre || userData.name || firebaseUser.email?.split('@')[0] || 'Usuario'
+            })
+          } else {
+            // Fallback si el usuario está en Auth pero no tiene documento en Firestore
+            setUser({
+              id: firebaseUser.uid,
+              username: firebaseUser.email || '',
+              role: 'employee',
+              name: firebaseUser.email?.split('@')[0] || 'Invitado'
+            })
+          }
+        } catch (error) {
+          console.error("Error al obtener perfil de usuario:", error)
         }
       } else {
         setUser(null)
@@ -58,7 +63,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (email: string, pass: string) => {
-  
     await signInWithEmailAndPassword(auth, email, pass)
   }
 

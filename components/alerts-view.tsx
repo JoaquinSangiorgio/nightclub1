@@ -1,37 +1,209 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { getAlerts, markAlertAsRead } from '@/lib/store'
-import { Alerta } from '@/lib/types' // Importamos el tipo en español
+import { useState, useEffect } from 'react'
+import { getReportDataCloud, getAlerts, markAlertAsRead } from '@/lib/store'
 import { 
-  Bell, 
-  AlertTriangle, 
-  XCircle, 
-  Check, 
-  CheckCheck,
-  Clock,
-  Loader2
+  FileText, Download, Calendar, TrendingUp, TrendingDown,
+  DollarSign, BarChart3, Activity, Loader2, List, Layers,
+  Clock, ArrowUpRight, Wallet, ShoppingCart, Wine, User, 
+  Bell, AlertTriangle, XCircle, Check, CheckCheck
 } from 'lucide-react'
 
-interface AlertsViewProps {
-  onRefreshAlerts: () => void
+const CATEGORIES_LABELS: Record<string, string> = {
+  whisky: 'Whisky', vodka: 'Vodka', ron: 'Licores', tequila: 'Tequila',
+  gin: 'Gin', cerveza: 'Cerveza', vino: 'Vino', champagne: 'Champagne',
+  otros: 'Otros', Gaseosa: 'Gaseosa', Combo: 'Combo', Licores: 'Licores'
 }
 
-export function AlertsView({ onRefreshAlerts }: AlertsViewProps) {
+// --- COMPONENTE PRINCIPAL DE REPORTES ---
+export function ReportsView() {
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [reportData, setReportData] = useState<any | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [isGrouped, setIsGrouped] = useState(true)
+
+  const generateReport = async () => {
+    setLoading(true)
+    try {
+      const start = new Date(startDate + 'T00:00:00')
+      const end = new Date(endDate + 'T23:59:59')
+      const data = await getReportDataCloud(start, end)
+      setReportData(data)
+    } catch (error) {
+      console.error("Error:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { generateReport() }, [])
+
+  const getProcessedMovements = () => {
+    if (!reportData) return []
+    if (!isGrouped) return reportData.movements
+
+    const grouped = reportData.movements.reduce((acc: any, curr: any) => {
+      const date = curr.createdAt?.toDate ? curr.createdAt.toDate() : new Date(curr.createdAt);
+      const timeKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+      const sessionKey = `${curr.descripcion || curr.notas}-${curr.nombreUsuario}-${timeKey}-${curr.type}`;
+      const key = `${curr.botellaID}-${sessionKey}`;
+
+      if (!acc[key]) {
+        acc[key] = { 
+          ...curr, 
+          totalQty: 0, 
+          count: 0,
+          displayDate: date,
+          isComboDisplay: curr.descripcion?.startsWith('Combo:') || curr.notas?.startsWith('Combo:')
+        }
+      }
+
+      acc[key].totalQty += curr.cantidad 
+      acc[key].count += 1
+      return acc
+    }, {})
+
+    return Object.values(grouped).sort((a: any, b: any) => b.displayDate - a.displayDate)
+  }
+
+  const maxCategoryValue = reportData?.salesByCategory 
+    ? Math.max(...Object.values(reportData.salesByCategory as Record<string, number>), 1) 
+    : 1
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700 font-rounded pb-10">
+      {/* Header y Filtros */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 bg-indigo-600 rounded-[1.8rem] flex items-center justify-center shadow-2xl shadow-indigo-600/40">
+            <BarChart3 className="w-7 h-7 text-white" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-black text-white uppercase italic tracking-tighter leading-none">Reportes</h1>
+            <p className="text-slate-500 font-bold text-[10px] uppercase tracking-[0.3em] mt-2">Auditoría de Sesión</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-900/80 backdrop-blur-md border-2 border-slate-800 p-2 rounded-[2.2rem] flex items-center gap-2 shadow-xl">
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent text-white font-black text-xs px-4 outline-none cursor-pointer" />
+          <div className="h-6 w-[2px] bg-slate-800" />
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent text-white font-black text-xs px-4 outline-none cursor-pointer" />
+          <button onClick={generateReport} className="bg-indigo-600 hover:bg-indigo-500 text-white font-black px-8 py-3 rounded-[1.6rem] text-[10px] uppercase transition-all shadow-lg">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sincronizar'}
+          </button>
+        </div>
+      </div>
+
+      {reportData ? (
+        <>
+          {/* KPI CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { label: 'Recaudación Est.', val: `$${reportData.totalRevenue.toLocaleString()}`, icon: Wallet, color: 'text-indigo-400' },
+              { label: 'Ventas Totales', val: reportData.totalSales, icon: ShoppingCart, color: 'text-rose-400' },
+              { label: 'Ingresos Stock', val: reportData.totalEntries, icon: TrendingUp, color: 'text-emerald-400' },
+              { label: 'Movimientos', val: reportData.movements.length, icon: Activity, color: 'text-slate-500' }
+            ].map((kpi, i) => (
+              <div key={i} className="bg-[#0f172a]/40 border-2 border-slate-800/50 p-6 rounded-[2rem] relative overflow-hidden group shadow-lg">
+                <kpi.icon className={`absolute -right-4 -bottom-4 w-20 h-20 opacity-5 ${kpi.color}`} />
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">{kpi.label}</p>
+                <h3 className={`text-3xl font-black italic tracking-tighter ${kpi.color}`}>{kpi.val}</h3>
+              </div>
+            ))}
+          </div>
+
+          {/* TABLA DE AUDITORÍA CONSOLIDADA */}
+          <div className="bg-[#0f172a]/40 border-2 border-slate-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="p-8 border-b-2 border-slate-800 flex justify-between items-center bg-slate-900/20">
+              <h2 className="font-black text-white uppercase italic text-lg tracking-tight">Auditoría por Cierre</h2>
+              <button 
+                onClick={() => setIsGrouped(!isGrouped)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase transition-all ${isGrouped ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`}
+              >
+                <List className="w-4 h-4" />
+                {isGrouped ? 'Cierres Agrupados' : 'Lista Individual'}
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-950/50 border-b border-slate-800 text-slate-500 font-black text-[10px] uppercase">
+                  <tr>
+                    <th className="p-6">Fecha / Hora</th>
+                    <th className="p-6">Producto</th>
+                    <th className="p-6 text-center">Frecuencia</th>
+                    <th className="p-6">Operador</th>
+                    <th className="p-6 text-center">Cant. Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {getProcessedMovements().map((m: any, i: number) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="p-6">
+                        <p className="text-white font-bold text-xs">{m.displayDate.toLocaleDateString()}</p>
+                        <p className="text-[10px] text-slate-600 font-black uppercase">{m.displayDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} HS</p>
+                      </td>
+                      <td className="p-6">
+                        <div className="flex items-center gap-3">
+                          {m.isComboDisplay ? <Layers className="w-4 h-4 text-purple-400" /> : <Wine className="w-4 h-4 text-slate-500" />}
+                          <p className="text-sm text-white font-black uppercase italic">{m.nombreBotella}</p>
+                        </div>
+                      </td>
+                      <td className="p-6 text-center">
+                        <span className="text-[9px] font-black bg-slate-900 px-3 py-1 rounded-full text-slate-500 border border-slate-800">
+                          {isGrouped ? `${m.count} CLICKS` : '1 CLICK'}
+                        </span>
+                      </td>
+                      <td className="p-6 text-xs font-bold text-indigo-400 uppercase italic">
+                        {m.nombreUsuario || 'Admin'}
+                      </td>
+                      <td className={`p-6 text-center text-2xl font-black italic ${m.type === 'Entrada' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {m.type === 'Entrada' ? '+' : '-'}{isGrouped ? m.totalQty : m.cantidad}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="py-40 flex items-center justify-center">
+          <Loader2 className="w-10 h-10 text-slate-800 animate-spin" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- EXPORT ADICIONAL PARA EVITAR ERRORES EN EL DASHBOARD ---
+export function AlertsView({ onRefreshAlerts }: { onRefreshAlerts?: () => void }) {
   const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('unread')
+  const [actionLoading, setActionLoading] = useState<string | null>(null) // Para feedback visual al clickear
 
   const loadAlerts = async () => {
+    setLoading(true)
     const data = await getAlerts()
     setAlerts(data)
     setLoading(false)
-    onRefreshAlerts() // Actualiza el contador del sidebar
+    if (onRefreshAlerts) onRefreshAlerts() 
   }
 
-  useEffect(() => {
-    loadAlerts()
-  }, [])
+  const handleMarkAsRead = async (alertId: string) => {
+    setActionLoading(alertId)
+    const success = await markAlertAsRead(alertId)
+    if (success) {
+      // Actualizamos el estado local inmediatamente para mejor UX
+      setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isRead: true } : a))
+      if (onRefreshAlerts) onRefreshAlerts()
+    }
+    setActionLoading(null)
+  }
+
+  useEffect(() => { loadAlerts() }, [])
 
   const filteredAlerts = alerts.filter((alert) => {
     if (filter === 'unread') return !alert.isRead
@@ -39,144 +211,94 @@ export function AlertsView({ onRefreshAlerts }: AlertsViewProps) {
     return true
   })
 
-  const unreadCount = alerts.filter((a) => !a.isRead).length
-
-  const handleMarkAsRead = async (alertId: string) => {
-    await markAlertAsRead(alertId)
-    await loadAlerts()
-  }
-
-  // Función para formatear fechas de Firebase (Timestamps)
-  const formatDate = (createdAt: any) => {
-    if (!createdAt) return '---'
-    
-    // Si es un Timestamp de Firebase, tiene el método toDate()
-    const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-
-    if (diffMins < 1) return 'Ahora'
-    if (diffMins < 60) return `Hace ${diffMins} min`
-    if (diffHours < 24) return `Hace ${diffHours}h`
-    return date.toLocaleDateString()
-  }
-
-  if (loading) {
-    return (
-      <div className="h-96 flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-12 h-12 text-rose-500 animate-spin" />
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Cargando notificaciones...</p>
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="h-60 flex flex-col items-center justify-center gap-4">
+      <Loader2 className="w-10 h-10 animate-spin text-rose-500" />
+      <p className="text-slate-500 font-black text-[10px] uppercase tracking-widest">Escaneando Inventario...</p>
+    </div>
+  )
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 font-rounded">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between gap-4 px-2">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-rose-500/20 rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/10">
-            <Bell className="w-7 h-7 text-rose-500" />
+          <div className="w-12 h-12 bg-rose-500/20 rounded-[1.2rem] flex items-center justify-center text-rose-500 shadow-lg shadow-rose-500/10">
+            <Bell className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-3xl font-black text-white uppercase italic tracking-tighter">Alertas</h1>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
-              {unreadCount > 0 ? `${unreadCount} pendientes de revisión` : 'Todo en orden en la cava'}
-            </p>
+            <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Alertas Generales</h2>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Notificaciones Críticas</p>
           </div>
+        </div>
+
+        <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 shadow-xl">
+          {['unread', 'read', 'all'].map((t) => (
+            <button 
+              key={t} 
+              onClick={() => setFilter(t as any)} 
+              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${filter === t ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              {t === 'unread' ? 'Pendientes' : t === 'read' ? 'Leídas' : 'Todas'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Tabs Estilizadas */}
-      <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 w-fit">
-        {[
-          { id: 'unread', label: 'Sin leer' },
-          { id: 'read', label: 'Historial' },
-          { id: 'all', label: 'Todas' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setFilter(tab.id as typeof filter)}
-            className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${
-              filter === tab.id
-                ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                : 'text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         {filteredAlerts.length === 0 ? (
-          <div className="bg-slate-900/20 border-2 border-dashed border-slate-800 rounded-[2.5rem] p-20 text-center">
-            <CheckCheck className="w-12 h-12 mx-auto mb-4 text-slate-800" />
-            <p className="text-slate-600 font-bold italic uppercase text-sm tracking-widest">
-              No hay alertas para mostrar
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-900/20 rounded-[3rem] border-2 border-dashed border-slate-800/50">
+            <CheckCheck className="w-12 h-12 text-slate-800 mb-4" />
+            <p className="text-slate-600 text-[10px] font-black uppercase italic tracking-widest text-center px-10">
+              No hay alertas que coincidan con el filtro seleccionado
             </p>
           </div>
         ) : (
           filteredAlerts.map((alert) => (
-            <div
-              key={alert.id}
-              className={`
-                relative overflow-hidden bg-slate-900/40 border-2 rounded-[2rem] p-6 transition-all group
-                ${alert.isRead 
-                  ? 'border-slate-800 opacity-50' 
-                  : alert.type === 'out_of_stock'
-                    ? 'border-rose-500/50 bg-rose-500/5 shadow-lg shadow-rose-500/5'
-                    : 'border-orange-500/50 bg-orange-500/5 shadow-lg shadow-orange-500/5'
-                }
-              `}
+            <div 
+              key={alert.id} 
+              className={`group p-6 rounded-[2.2rem] border-2 transition-all duration-300 flex justify-between items-center ${
+                alert.isRead 
+                ? 'border-slate-800/40 bg-transparent opacity-60' 
+                : alert.type === 'out_of_stock' 
+                  ? 'border-rose-500/40 bg-rose-500/[0.03] shadow-lg shadow-rose-500/5' 
+                  : 'border-orange-500/40 bg-orange-500/[0.03] shadow-lg shadow-orange-500/5'
+              }`}
             >
-              <div className="flex items-start gap-5">
-                <div className={`
-                  w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 border-2
-                  ${alert.type === 'out_of_stock' 
-                    ? 'bg-rose-500/20 border-rose-500/30 text-rose-500' 
-                    : 'bg-orange-500/20 border-orange-500/30 text-orange-500'
-                  }
-                `}>
-                  {alert.type === 'out_of_stock' ? (
-                    <XCircle className="w-6 h-6" />
-                  ) : (
-                    <AlertTriangle className="w-6 h-6" />
-                  )}
+              <div className="flex items-center gap-5">
+                <div className={`p-4 rounded-2xl ${alert.isRead ? 'bg-slate-800/50 text-slate-600' : alert.type === 'out_of_stock' ? 'bg-rose-500/20 text-rose-500' : 'bg-orange-500/20 text-orange-500'}`}>
+                  {alert.type === 'out_of_stock' ? <XCircle className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
                 </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className={`font-black uppercase italic tracking-tight text-lg ${alert.isRead ? 'text-slate-400' : 'text-white'}`}>
-                        {alert.type === 'out_of_stock' ? 'Sin Stock' : 'Stock Crítico'}
-                      </h3>
-                      <p className="text-slate-300 font-bold text-sm uppercase mt-1">{alert.nombreBotella}</p>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase mt-2 tracking-widest">
-                        ID: {alert.botellaID}
-                      </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 flex-shrink-0">
-                      <span className="text-[10px] font-black text-slate-600 uppercase flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-full">
-                        <Clock className="w-3 h-3 text-rose-500" />
-                        {formatDate(alert.createdAt)}
-                      </span>
-                      
-                      {!alert.isRead && (
-                        <button
-                          onClick={() => handleMarkAsRead(alert.id)}
-                          className="p-3 bg-white text-slate-950 hover:bg-rose-500 hover:text-white rounded-xl transition-all active:scale-90 shadow-xl"
-                          title="Marcar como revisada"
-                        >
-                          <Check className="w-5 h-5 stroke-[3px]" />
-                        </button>
-                      )}
-                    </div>
+                <div>
+                  <h4 className="text-white font-black text-lg uppercase italic leading-none tracking-tight">{alert.nombreBotella}</h4>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${alert.isRead ? 'bg-slate-800 text-slate-500' : 'bg-white/10 text-white'}`}>
+                      {alert.type === 'out_of_stock' ? 'Sin Stock' : 'Stock Bajo'}
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-bold uppercase italic">
+                      {alert.createdAt?.toDate ? alert.createdAt.toDate().toLocaleString() : new Date(alert.createdAt).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>
+
+              {/* BOTÓN DE VISTO */}
+              {!alert.isRead && (
+                <button
+                  onClick={() => handleMarkAsRead(alert.id)}
+                  disabled={actionLoading === alert.id}
+                  className="flex items-center gap-2 bg-slate-900 hover:bg-emerald-600 border border-slate-800 hover:border-emerald-500 p-4 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-90 group/btn"
+                  title="Marcar como leído"
+                >
+                  {actionLoading === alert.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <span className="text-[10px] font-black uppercase hidden md:inline">Visto</span>
+                      <Check className="w-5 h-5 group-hover/btn:scale-125 transition-transform" />
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           ))
         )}

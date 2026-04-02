@@ -8,7 +8,7 @@ export interface Usuario {
 }
 
 export interface ItemReceta {
-  productId: string; // Mantenemos el ID técnico para el cruce
+  productId: string; 
   cantidad: number;
 }
 
