@@ -86,7 +86,7 @@ export function Sidebar({ activeSection, onSectionChange, alertCount }: SidebarP
                 <Wine className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white tracking-tight leading-none">ClubNight</h1>
+                <h1 className="text-xl font-bold text-white tracking-tight leading-none">BUTIC</h1>
                
               </div>
             </div>
