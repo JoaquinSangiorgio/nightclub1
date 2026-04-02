@@ -182,7 +182,7 @@ export function AlertsView({ onRefreshAlerts }: { onRefreshAlerts?: () => void }
   const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('unread')
-  const [actionLoading, setActionLoading] = useState<string | null>(null) // Para feedback visual al clickear
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const loadAlerts = async () => {
     setLoading(true)
@@ -196,7 +196,6 @@ export function AlertsView({ onRefreshAlerts }: { onRefreshAlerts?: () => void }
     setActionLoading(alertId)
     const success = await markAlertAsRead(alertId)
     if (success) {
-      // Actualizamos el estado local inmediatamente para mejor UX
       setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isRead: true } : a))
       if (onRefreshAlerts) onRefreshAlerts()
     }
@@ -219,24 +218,27 @@ export function AlertsView({ onRefreshAlerts }: { onRefreshAlerts?: () => void }
   )
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between gap-4 px-2">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+      
+      {/* HEADER RESPONSIVE */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 px-2">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-rose-500/20 rounded-[1.2rem] flex items-center justify-center text-rose-500 shadow-lg shadow-rose-500/10">
+          <div className="w-12 h-12 bg-rose-500/20 rounded-[1.2rem] flex items-center justify-center text-rose-500 shadow-lg shrink-0">
             <Bell className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter">Alertas Generales</h2>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Notificaciones Críticas</p>
+            <h2 className="text-2xl sm:text-3xl font-black text-white uppercase italic tracking-tighter leading-none">Alertas</h2>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-1">Notificaciones Críticas</p>
           </div>
         </div>
 
-        <div className="flex gap-2 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 shadow-xl">
+        {/* SELECTOR DE FILTROS - Scroll horizontal en móviles si es necesario */}
+        <div className="flex gap-1.5 bg-slate-900/50 p-1.5 rounded-2xl border border-slate-800 shadow-xl self-start sm:self-auto overflow-x-auto no-scrollbar">
           {['unread', 'read', 'all'].map((t) => (
             <button 
               key={t} 
               onClick={() => setFilter(t as any)} 
-              className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${filter === t ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' : 'text-slate-500 hover:text-slate-300'}`}
+              className={`px-4 sm:px-6 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase transition-all whitespace-nowrap ${filter === t ? 'bg-rose-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
             >
               {t === 'unread' ? 'Pendientes' : t === 'read' ? 'Leídas' : 'Todas'}
             </button>
@@ -244,57 +246,58 @@ export function AlertsView({ onRefreshAlerts }: { onRefreshAlerts?: () => void }
         </div>
       </div>
 
-      <div className="grid gap-4">
+      {/* GRID DE ALERTAS */}
+      <div className="grid gap-4 px-1">
         {filteredAlerts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 bg-slate-900/20 rounded-[3rem] border-2 border-dashed border-slate-800/50">
             <CheckCheck className="w-12 h-12 text-slate-800 mb-4" />
             <p className="text-slate-600 text-[10px] font-black uppercase italic tracking-widest text-center px-10">
-              No hay alertas que coincidan con el filtro seleccionado
+              No hay alertas pendientes
             </p>
           </div>
         ) : (
           filteredAlerts.map((alert) => (
             <div 
               key={alert.id} 
-              className={`group p-6 rounded-[2.2rem] border-2 transition-all duration-300 flex justify-between items-center ${
+              className={`group p-4 sm:p-6 rounded-[2rem] border-2 transition-all duration-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
                 alert.isRead 
                 ? 'border-slate-800/40 bg-transparent opacity-60' 
                 : alert.type === 'out_of_stock' 
-                  ? 'border-rose-500/40 bg-rose-500/[0.03] shadow-lg shadow-rose-500/5' 
-                  : 'border-orange-500/40 bg-orange-500/[0.03] shadow-lg shadow-orange-500/5'
+                  ? 'border-rose-500/40 bg-rose-500/[0.03]' 
+                  : 'border-orange-500/40 bg-orange-500/[0.03]'
               }`}
             >
-              <div className="flex items-center gap-5">
-                <div className={`p-4 rounded-2xl ${alert.isRead ? 'bg-slate-800/50 text-slate-600' : alert.type === 'out_of_stock' ? 'bg-rose-500/20 text-rose-500' : 'bg-orange-500/20 text-orange-500'}`}>
-                  {alert.type === 'out_of_stock' ? <XCircle className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+              <div className="flex items-center gap-4 w-full">
+                <div className={`p-3 sm:p-4 rounded-2xl shrink-0 ${alert.isRead ? 'bg-slate-800/50 text-slate-600' : alert.type === 'out_of_stock' ? 'bg-rose-500/20 text-rose-500' : 'bg-orange-500/20 text-orange-500'}`}>
+                  {alert.type === 'out_of_stock' ? <XCircle className="w-5 h-5 sm:w-6 sm:h-6" /> : <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />}
                 </div>
-                <div>
-                  <h4 className="text-white font-black text-lg uppercase italic leading-none tracking-tight">{alert.nombreBotella}</h4>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${alert.isRead ? 'bg-slate-800 text-slate-500' : 'bg-white/10 text-white'}`}>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-white font-black text-base sm:text-lg uppercase italic leading-none tracking-tight truncate">{alert.nombreBotella}</h4>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md ${alert.isRead ? 'bg-slate-800 text-slate-500' : 'bg-white/10 text-white'}`}>
                       {alert.type === 'out_of_stock' ? 'Sin Stock' : 'Stock Bajo'}
                     </span>
-                    <span className="text-[9px] text-slate-500 font-bold uppercase italic">
-                      {alert.createdAt?.toDate ? alert.createdAt.toDate().toLocaleString() : new Date(alert.createdAt).toLocaleString()}
+                    <span className="text-[8px] text-slate-600 font-bold uppercase italic flex items-center gap-1">
+                      <Clock className="w-2.5 h-2.5" />
+                      {alert.createdAt?.toDate ? alert.createdAt.toDate().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : new Date(alert.createdAt).toLocaleString()}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* BOTÓN DE VISTO */}
+              {/* ACCIÓN RESPONSIVE */}
               {!alert.isRead && (
                 <button
                   onClick={() => handleMarkAsRead(alert.id)}
                   disabled={actionLoading === alert.id}
-                  className="flex items-center gap-2 bg-slate-900 hover:bg-emerald-600 border border-slate-800 hover:border-emerald-500 p-4 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-90 group/btn"
-                  title="Marcar como leído"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-emerald-600 border border-slate-800 hover:border-emerald-500 p-4 sm:px-6 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-95 group/btn"
                 >
                   {actionLoading === alert.id ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <span className="text-[10px] font-black uppercase hidden md:inline">Visto</span>
-                      <Check className="w-5 h-5 group-hover/btn:scale-125 transition-transform" />
+                      <span className="text-[10px] font-black uppercase">Marcar Visto</span>
+                      <Check className="w-4 h-4 group-hover/btn:scale-125 transition-transform" />
                     </>
                   )}
                 </button>
