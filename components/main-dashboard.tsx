@@ -16,23 +16,20 @@ export function MainDashboard() {
   const [alertCount, setAlertCount] = useState(0)
   const { user } = useAuth()
 
-  // 1. Convertimos refreshAlerts en ASYNC
- const refreshAlerts = async () => {
-  try {
-    const alerts = await getAlerts()
-    // Agregamos una validación para evitar errores si 'a' es null o no tiene la propiedad
-    const unread = alerts.filter((a: any) => a && a.isRead === false)
-    setAlertCount(unread.length)
-  } catch (error) {
-    console.error("Error al refrescar alertas:", error)
+  // CORRECCIÓN DEFINITIVA DEL CONTADOR
+  const refreshAlerts = async () => {
+    try {
+      const alerts = await getAlerts()
+      // Filtramos por el campo CORRECTO: 'leida'
+      const unread = alerts.filter((a: any) => a && a.leida === false)
+      setAlertCount(unread.length)
+    } catch (error) {
+      console.error("Error al refrescar alertas:", error)
+    }
   }
-}
 
   useEffect(() => {
-    // 2. Llamamos a la función asíncrona
     refreshAlerts()
-    
-    // Intervalo de 30 segundos (5 es muy poco para Firebase/cuota gratuita)
     const interval = setInterval(refreshAlerts, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -40,7 +37,7 @@ export function MainDashboard() {
   const renderContent = () => {
     switch (activeSection) {
       case 'dashboard':
-        return user?.role === 'owner' ? <DashboardView onNavigate={setActiveSection} /> : <InventoryView />
+        return <DashboardView onNavigate={setActiveSection} />
       case 'inventory':
         return <InventoryView /> 
       case 'entrada':
@@ -50,14 +47,16 @@ export function MainDashboard() {
       case 'alerts':
         return <AlertsView onRefreshAlerts={refreshAlerts} />
       case 'reports':
-        return user?.role === 'owner' ? <ReportsView /> : <DashboardView onNavigate={setActiveSection} />
+        // Ahora permitimos que todos entren a 'reports', 
+        // ReportsView adentro se encarga de mostrar solo el arqueo si no es owner
+        return <ReportsView />
       default:
         return <DashboardView onNavigate={setActiveSection} />
     }
   }
 
   return (
-    <div className="h-screen w-full bg-[#0f172a] flex text-slate-200 selection:bg-indigo-500/30 overflow-hidden">
+    <div className="h-screen w-full bg-[#0f172a] flex text-slate-200 selection:bg-indigo-500/30 overflow-hidden font-rounded">
       <Sidebar
         activeSection={activeSection}
         onSectionChange={setActiveSection}
@@ -67,7 +66,7 @@ export function MainDashboard() {
       <main className="flex-1 min-h-0 relative flex flex-col">
         <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/5 via-transparent to-transparent pointer-events-none" />
         
-        <div className="flex-1 overflow-y-auto custom-scrollbar relative p-6 lg:p-12">
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative p-4 lg:p-10">
           <div className="max-w-[1600px] mx-auto min-h-full">
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
               {renderContent()}
@@ -79,20 +78,27 @@ export function MainDashboard() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
         
+        :root {
+          --font-quicksand: 'Quicksand', sans-serif;
+        }
+
         html, body {
           margin: 0;
           padding: 0;
           overflow: hidden !important;
           background-color: #0f172a;
-          font-family: 'Quicksand', sans-serif !important;
+          font-family: var(--font-quicksand) !important;
         }
 
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .font-rounded {
+          font-family: var(--font-quicksand) !important;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb {
           background: #1e293b;
           border-radius: 20px;
-          border: 2px solid #0f172a;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
       `}</style>
