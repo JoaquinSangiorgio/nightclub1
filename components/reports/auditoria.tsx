@@ -229,7 +229,7 @@ function AuditMobileCard({ m, isExpanded, onToggle, onPrint }: any) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
                <span className={`text-[6px] font-black px-1.5 py-0.5 rounded uppercase ${isEntry ? 'bg-orange-500' : isGift ? 'bg-purple-600' : 'bg-indigo-600'} text-white`}>
-                {isEntry ? 'STOCK' : isGift ? 'GIFT' : 'SALE'}
+                {isEntry ? 'STOCK' : isGift ? 'REGALO' : 'VENTA'}
                </span>
                <span className="text-[8px] font-black text-slate-600 uppercase italic">
                 {new Date(m.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}

@@ -47,33 +47,43 @@ export function Arqueo({ movements, onAuditSuccess }: ArqueoProps) {
   }, [])
 
   const cashFlow = useMemo(() => {
-    const filtered = activeMovements.filter((m: any) => 
-      m.tipo === 'venta' && (cashUserFilter === 'todos' ? true : m.nombreUsuario === cashUserFilter)
-    );
+  // Filtramos ventas del usuario que NO sean regalos/cortesías
+  const filtered = activeMovements.filter((m: any) => {
+    const isVenta = m.tipo === 'venta';
+    const isUser = cashUserFilter === 'todos' ? true : m.nombreUsuario === cashUserFilter;
+    
+    //Excluir explícitamente cualquier cosa que sea regalo
+    const notas = (m.notas || "").toUpperCase();
+    const esRegalo = notas.includes("REGALO") || notas.includes("CORTESIA") || notas.includes("INVITACION");
+    
+    // Solo contamos ventas reales con monto mayor a cero
+    return isVenta && isUser && !esRegalo && Number(m.monto) > 0;
+  });
 
-    const getMontoPorMetodo = (metodo: string) => {
-      return filtered
-        .filter((m: any) => (m.notas || "").toLowerCase().includes(`pago: ${metodo.toLowerCase()}`))
-        .reduce((a: number, c: any) => a + Number(c.monto || 0), 0);
-    };
+  const getMontoPorMetodo = (metodo: string) => {
+    return filtered
+      .filter((m: any) => (m.notas || "").toLowerCase().includes(`pago: ${metodo.toLowerCase()}`))
+      .reduce((a: number, c: any) => a + Number(c.monto || 0), 0);
+  };
 
-    const efectivo = getMontoPorMetodo('Efectivo');
-    const transferencia = getMontoPorMetodo('Transferencia');
-    const tarjeta = getMontoPorMetodo('Tarjeta');
+  const efectivo = getMontoPorMetodo('Efectivo');
+  const transferencia = getMontoPorMetodo('Transferencia');
+  const tarjeta = getMontoPorMetodo('Tarjeta');
 
-    return {
-      Efectivo: efectivo,
-      Transferencia: transferencia,
-      Tarjeta: tarjeta,
-      total: efectivo + transferencia + tarjeta
-    };
-  }, [activeMovements, cashUserFilter]);
+  return {
+    Efectivo: efectivo,
+    Transferencia: transferencia,
+    Tarjeta: tarjeta,
+    total: efectivo + transferencia + tarjeta
+  };
+}, [activeMovements, cashUserFilter]);
+
 
   const usersList = useMemo(() => {
     return Array.from(new Set(movements.map((m: any) => m.nombreUsuario).filter(Boolean))) as string[];
   }, [movements]);
 
-  // ✅ TICKET LIMPIO SIN HEADERS DE GOOGLE
+  //  TICKET LIMPIO
   const printAuditTicket = (data: any) => {
     const ticketWindow = window.open('', '_blank');
     if (!ticketWindow) return;

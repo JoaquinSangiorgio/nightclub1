@@ -47,6 +47,13 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
         .filter((b: Botella) => b.tipo === 'botella' && Number(b.stockMl) <= Number(b.stockMinMl))
         .slice(0, 5)
       setLowStockItems(lowStock)
+
+      //POCO STOCK: Si queremos ser más estrictos, podríamos ordenar por el porcentaje de stock restante para mostrar primero los más críticos. Ejemplo:
+          const out_of_stock = bottles
+          .filter((b: Botella) => b.tipo === 'botella' && Number(b.stockMl) <= Number(b.stockMinMl))
+            .sort((a, b) => (Number(a.stockMl) / Number(a.stockMinMl)) - (Number(b.stockMl) / Number(b.stockMinMl)))
+            .slice(0, 5)
+          setLowStockItems(lowStock)
       
       // 2. Alertas pendientes
       setRecentAlerts((alerts as Alerta[]).filter(a => !a.leida).slice(0, 5))
@@ -74,7 +81,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
 
   useEffect(() => {
     loadData()
-    const interval = setInterval(loadData, 30000) // Bajamos a 30s para que se vea más real-time
+    const interval = setInterval(loadData, 30000) 
     return () => clearInterval(interval)
   }, [isOwner])
 
@@ -142,6 +149,7 @@ export function DashboardView({ onNavigate }: DashboardViewProps) {
           { label: 'Stock en Barra', val: `${stats.totalBotellas || 0} bot.`, icon: Droplets, color: 'text-indigo-400' },
           { label: 'Valor en Bodega', val: `$${(stats.valorTotal || 0).toLocaleString()}`, icon: DollarSign, color: 'text-emerald-400' },
           { label: 'Stock Crítico', val: stats.conteoStockBajo || 0, icon: AlertTriangle, color: 'text-orange-400' },
+          { label: 'Agotados', val: stats.conteoSinStock || 0, icon: XCircle, color: 'text-red-400' },
           
         ].map((s, i) => (
           <div key={i} className="bg-[#0f172a]/40 border-2 border-slate-800 p-6 rounded-[2.2rem] hover:border-indigo-500/30 transition-all group relative overflow-hidden">

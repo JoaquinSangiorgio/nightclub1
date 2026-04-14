@@ -11,8 +11,8 @@ export interface Usuario {
 
 // ✅ Receta: La "fórmula" para Tragos y Combos
 export interface ItemReceta {
-  productId: string         // ID de la BOTELLA base (insumo)
-  cantidad: number          // ML para Tragos, Unidades para Combos
+  productId: string         
+  cantidad: number          
 }
 
 // ✅ Categorías permitidas

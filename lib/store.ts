@@ -57,6 +57,7 @@ export async function addMovement(
     // --- LÓGICA DE STOCK ---
     if ((item.tipo === 'trago' || item.tipo === 'combo') && item.receta) {
       for (const ing of item.receta) {
+        
         const insumoId = ing.productId || (ing as any).productID;
         const insumoRef = doc(db, COL_BOTELLAS, insumoId);
         const insumoSnap = await getDoc(insumoRef);
@@ -138,25 +139,47 @@ async function checkAndCreateAlerts(id: string, item: any) {
   const currentMl = Number(item.stockMl || 0);
   const minMl = Number(item.stockMinMl || 0);
   
-  if (currentMl <= minMl) {
-    const tipoAlerta = currentMl <= 1.5 ? "out_of_stock" : "low_stock";
+  // Si el stock es mayor al mínimo, no hay nada que hacer
+  if (currentMl > minMl) return;
+
+  // 1. Definimos qué tipo de alerta corresponde AHORA
+  const EPSILON = 0.01;
+  const tipoNuevo = currentMl <= EPSILON ? "out_of_stock" : "low_stock";
+  
+  try {
+    // 2. Buscamos CUALQUIER alerta previa sin leer de esta botella
     const q = query(
       collection(db, COL_ALERTAS), 
       where("botellaId", "==", id), 
-      where("leida", "==", false),
-      where("tipo", "==", tipoAlerta)
+      where("leida", "==", false)
     );
     
     const snap = await getDocs(q);
-    if (snap.empty) {
-      await addDoc(collection(db, COL_ALERTAS), {
-        botellaId: id,
-        nombreBotella: item.nombre || 'Producto',
-        leida: false,
-        tipo: tipoAlerta,
-        createdAt: new Date().toISOString()
-      });
+
+    // 3. Evaluamos si hay que cambiar algo
+    if (!snap.empty) {
+      const alertaActual = snap.docs[0].data();
+      
+      // Si la alerta que ya existe es del MISMO tipo, no hacemos nada (evita duplicados)
+      if (alertaActual.tipo === tipoNuevo) return;
+
+      // Si el tipo cambió (ej: de bajo a agotado), marcamos las viejas como leídas
+      const batch = writeBatch(db);
+      snap.docs.forEach(doc => batch.update(doc.ref, { leida: true }));
+      await batch.commit();
     }
+
+    // 4. Creamos la nueva alerta (si llegamos acá es porque no había alerta o la que había era distinta)
+    await addDoc(collection(db, COL_ALERTAS), {
+      botellaId: id,
+      nombreBotella: item.nombre || 'Producto',
+      leida: false,
+      tipo: tipoNuevo,
+      createdAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error("Error en checkAndCreateAlerts:", error);
   }
 }
 
@@ -202,8 +225,18 @@ export async function getDashboardStats() {
   try {
     const items = await getBottles();
     const onlyBottles = items.filter(i => i.tipo === 'botella');
+    
+    const UMBRAL = 10; 
 
-    // Solo ventas de la jornada activa (sin cerrar)
+    // 1. Definimos el inicio de la jornada para el Dashboard
+    // Si entras a las 3 AM del Domingo, la jornada empezó el Sábado a las 18hs.
+    const ahora = new Date();
+    const limiteJornada = new Date();
+    if (ahora.getHours() < 10) {
+      limiteJornada.setDate(ahora.getDate() - 1);
+    }
+    limiteJornada.setHours(18, 0, 0, 0);
+
     const qActive = query(
       collection(db, COL_MOVIMIENTOS),
       where("isClosed", "==", false),
@@ -217,8 +250,21 @@ export async function getDashboardStats() {
 
     snapActive.docs.forEach(d => {
       const data = d.data();
-      revenueToday += (Number(data.monto) || 0);
-      giftsTotalToday += (Number(data.valorCortesia) || 0);
+      const fechaMov = new Date(data.createdAt);
+
+      // 🔥 Filtro de Jornada: Solo sumamos si ocurrió después de las 18hs de la jornada activa
+      if (fechaMov >= limiteJornada) {
+        const notas = (data.notas || "").toUpperCase();
+        const esRegalo = notas.includes("REGALO") || notas.includes("CORTESIA") || notas.includes("INVITACION");
+
+        // 🔥 Dinero Real: Si NO es regalo, suma a las ventas
+        if (!esRegalo) {
+          revenueToday += (Number(data.monto) || 0);
+        }
+        
+        // El valor de las cortesías siempre suma al total de regalos
+        giftsTotalToday += (Number(data.valorCortesia) || 0);
+      }
     });
 
     return {
@@ -227,16 +273,21 @@ export async function getDashboardStats() {
           const unidades = Number(i.stockMl || 0) / Number(i.mlPorUnidad || 1);
           return sum + (unidades * Number(i.precioCosto || 0));
         }, 0).toFixed(2)),
-      conteoSinStock: onlyBottles.filter(i => Number(i.stockMl || 0) <= 1.5).length,
+
+      conteoSinStock: onlyBottles.filter(i => Number(i.stockMl || 0) < UMBRAL).length,
+
       conteoStockBajo: onlyBottles.filter(i => {
           const stock = Number(i.stockMl || 0);
           const min = Number(i.stockMinMl || 0);
-          return stock <= min && stock > 1.5;
+          return stock <= min && stock >= UMBRAL;
       }).length,
+
       revenueToday: Number(revenueToday),
       giftsToday: Number(giftsTotalToday) 
     };
-  } catch (error) { return { totalBotellas: 0, valorTotal: 0, conteoStockBajo: 0, conteoSinStock: 0, revenueToday: 0, giftsToday: 0 }; }
+  } catch (error) { 
+    return { totalBotellas: 0, valorTotal: 0, conteoStockBajo: 0, conteoSinStock: 0, revenueToday: 0, giftsToday: 0 }; 
+  }
 }
 
 // --- 7. ARQUEO Y CIERRE DE JORNADA ---

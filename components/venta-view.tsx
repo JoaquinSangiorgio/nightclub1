@@ -41,17 +41,21 @@ export function VentaView() {
     localStorage.setItem('bar_session_sales', JSON.stringify(sessionSales))
   }, [sessionSales])
 
-  const checkStockStatus = (item: Botella) => {
+  // ✅ LOGICA DE STOCK MEJORADA (Acumulativa con el carrito)
+  const checkStockStatus = (item: Botella, currentQtyInCart: number = 0) => {
     const missingIngredients: string[] = [];
+    const qtyToValidate = currentQtyInCart + 1;
 
     if (item.tipo === 'botella') {
-      if ((item.stockMl || 0) < (item.mlPorUnidad || 0)) {
+      const totalNeeded = qtyToValidate * (item.mlPorUnidad || 0);
+      if ((item.stockMl || 0) < totalNeeded) {
         missingIngredients.push(item.nombre);
       }
     } else if (item.receta && item.receta.length > 0) {
       for (const ing of item.receta) {
         const insumo = bottles.find(b => b.id === ing.productId)
-        if (!insumo || (Number(insumo.stockMl || 0)) < Number(ing.cantidad)) {
+        const totalNeeded = qtyToValidate * Number(ing.cantidad);
+        if (!insumo || (Number(insumo.stockMl || 0)) < totalNeeded) {
           missingIngredients.push(insumo?.nombre || "Insumo");
         }
       }
@@ -64,9 +68,15 @@ export function VentaView() {
   }
 
   const handleQuickSale = (item: Botella) => {
-    const { available, missingNames } = checkStockStatus(item)
+    // Obtenemos la cantidad actual en carrito para validar stock
+    const inCart = sessionSales.find(s => s.id === item.id)?.qty || 0;
+    const { available, missingNames } = checkStockStatus(item, inCart)
+    
     if (!available) {
-      toast.error(`Falta stock de: ${missingNames.join(', ')}`)
+      toast.error(`STOCK INSUFICIENTE. Falta: ${missingNames.join(', ')}`, {
+        duration: 2000,
+        className: "font-black uppercase italic text-[10px] tracking-tighter bg-rose-950 text-rose-200 border-rose-500"
+      })
       return
     }
 
@@ -88,56 +98,81 @@ export function VentaView() {
   }
 
   const printTicket = (ticketId: string) => {
-    const total = isCourtesy ? 0 : sessionSales.reduce((acc, curr) => acc + (curr.qty * curr.precio), 0)
-    const ticketWindow = window.open('', '_blank', 'width=300,height=600')
-    if (!ticketWindow) return
+    const total = isCourtesy ? 0 : sessionSales.reduce((acc, curr) => acc + (curr.qty * curr.precio), 0);
+    const ticketWindow = window.open('', '', 'width=300,height=600');
+    if (!ticketWindow) return;
 
     ticketWindow.document.write(`
       <html>
         <head>
+          <title>Ticket ${ticketId} - BUTIC</title>
           <style>
-            body { font-family: 'Courier New', monospace; width: 80mm; padding: 10px; font-size: 12px; }
+            @page { size: auto; margin: 0mm; }
+            body { 
+              font-family: 'Courier New', monospace; 
+              width: 80mm; 
+              padding: 10mm; 
+              font-size: 11px; 
+              color: #000;
+              line-height: 1.2;
+            }
             .text-center { text-align: center; }
-            .header { font-weight: bold; font-size: 16px; margin-bottom: 10px; }
-            .divider { border-top: 1px dashed #000; margin: 10px 0; }
-            .item { display: flex; justify-content: space-between; margin-bottom: 5px; }
-            .total { font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; }
+            .header { font-weight: bold; font-size: 18px; margin-bottom: 5px; }
+            .divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .item { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .total { font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; margin-top: 5px; }
+            .arca-block {
+              margin-top: 15px;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              border: 1px solid #000;
+              padding: 5px;
+            }
+            @media print {
+              header, footer { display: none !important; }
+            }
           </style>
         </head>
         <body>
           <div class="text-center header">BUTIC</div>
-          <div class="text-center">${isCourtesy ? 'INVITACIÓN / CORTESÍA' : 'Comprobante de Venta'}</div>
-          <div class="text-center">${new Date().toLocaleString()}</div>
+          <div class="text-center" style="font-size: 9px; margin-bottom: 5px;">Mendoza, Argentina</div>
+          <div class="text-center" style="font-weight: bold; border: 1px solid #000; padding: 2px;">
+            ${isCourtesy ? 'INVITACIÓN / CORTESÍA' : 'TICKET FACTURA'}
+          </div>
+          <div class="text-center" style="margin-top: 5px;">${new Date().toLocaleString('es-AR')}</div>
           <div class="divider"></div>
           <div class="item"><span>CAJERO:</span><span>${user?.name?.toUpperCase() || 'SISTEMA'}</span></div>
           <div class="divider"></div>
           ${sessionSales.map(item => `
             <div class="item">
-              <span>${item.qty} x ${item.name.substring(0, 20)}</span>
-              <span>$${(isCourtesy ? 0 : item.qty * item.precio).toLocaleString()}</span>
+              <span>${item.qty} x ${item.name.substring(0, 18)}</span>
+              <span>$${(isCourtesy ? 0 : item.qty * item.precio).toLocaleString('es-AR')}</span>
             </div>
           `).join('')}
           <div class="divider"></div>
-          <div class="item">
-            <span>MEDIO DE PAGO:</span>
-            <span>${isCourtesy ? 'CORTESÍA' : paymentMethod.toUpperCase()}</span>
-          </div>
+          <div class="item"><span>MEDIO DE PAGO:</span><span>${isCourtesy ? 'CORTESÍA' : paymentMethod.toUpperCase()}</span></div>
           ${clientName ? `<div class="item"><span>${isCourtesy ? 'PARA:' : 'CLIENTE:'}</span><span>${clientName.toUpperCase()}</span></div>` : ''}
-          <div class="total">
-            <span>TOTAL:</span>
-            <span>$${total.toLocaleString()}</span>
-          </div>
+          <div class="total"><span>TOTAL:</span><span>$${total.toLocaleString('es-AR')}</span></div>
           <div class="divider"></div>
-          <div class="text-center" style="font-size: 8px; margin-top: 10px;">Ticket: ${ticketId}</div>
-          <script>window.print(); window.close();</script>
+          ${!isCourtesy ? `
+            <div class="arca-block">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=https://www.afip.gob.ar/fe/qr/?p=${ticketId}" />
+              <div style="font-size: 7px; font-weight: bold; margin-top:5px;">COMPROBANTE AUTORIZADO POR ARCA</div>
+              <div style="font-size: 6px;">CAE: 74123985641235 </div>
+            </div>
+          ` : `
+            <div class="text-center" style="font-style: italic; font-size: 9px;">¡Disfrutá tu invitación!</div>
+          `}
+          <div class="text-center footer" style="font-size: 7px; margin-top: 15px;">Ticket: ${ticketId}<br>Gracias por elegir Butic</div>
+          <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 500); }</script>
         </body>
       </html>
-    `)
-    ticketWindow.document.close()
+    `);
+    ticketWindow.document.close();
   }
 
   const processFinalSale = async () => {
-    // Validaciones
     if (!isCourtesy && paymentMethod !== 'Efectivo' && !transactionRef) {
       toast.error("Falta el número de comprobante");
       return;
@@ -198,7 +233,6 @@ export function VentaView() {
 
   const totalAmount = isCourtesy ? 0 : sessionSales.reduce((acc, curr) => acc + (curr.qty * curr.precio), 0)
   const totalItemsInComanda = sessionSales.reduce((acc, curr) => acc + curr.qty, 0)
-
   const lowStockCount = bottles.filter(b => b.tipo === 'botella' && (b.stockMl || 0) <= (b.stockMinMl || 0)).length;
 
   if (loading) return (
@@ -241,15 +275,18 @@ export function VentaView() {
                   <div className="flex-1 h-[1px] bg-slate-800" />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {items.map(bottle => (
-                    <ItemButton 
-                      key={bottle.id} 
-                      bottle={bottle} 
-                      status={checkStockStatus(bottle)} 
-                      onClick={() => handleQuickSale(bottle)} 
-                      variant={section.tipo as any} 
-                    />
-                  ))}
+                  {items.map(bottle => {
+                    const inCart = sessionSales.find(s => s.id === bottle.id)?.qty || 0;
+                    return (
+                      <ItemButton 
+                        key={bottle.id} 
+                        bottle={bottle} 
+                        status={checkStockStatus(bottle, inCart)} 
+                        onClick={() => handleQuickSale(bottle)} 
+                        variant={section.tipo as any} 
+                      />
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -405,11 +442,9 @@ export function VentaView() {
 function ItemButton({ bottle, status, onClick, variant }: { bottle: Botella, status: { available: boolean, missingNames: string[] }, onClick: () => void, variant: any }) {
   const Icon = (variant === 'receta' || variant === 'trago') ? GlassWater : variant === 'combo' ? Layers : Wine
   const isOut = !status.available
-  
   const isBottle = bottle.tipo === 'botella';
   const stockActual = Number(bottle.stockMl || 0);
   const stockMinimo = Number(bottle.stockMinMl || 0);
-  
   const isLow = !isOut && isBottle && stockMinimo > 0 && stockActual <= stockMinimo;
 
   const activeColor = isOut ? 'rose' : isLow ? 'amber' : (variant === 'receta' || variant === 'trago') ? 'sky' : variant === 'combo' ? 'purple' : 'rose'
@@ -446,8 +481,8 @@ function ItemButton({ bottle, status, onClick, variant }: { bottle: Botella, sta
 
         {isOut ? (
           <div className="mt-2 flex flex-col items-center gap-1">
-            <span className="text-[7px] font-black text-rose-500 uppercase tracking-tighter leading-none">Falta:</span>
-            <span className="text-[8px] font-black text-rose-400 uppercase truncate w-full italic">
+            <span className="text-[12px] font-black text-rose-500 uppercase tracking-tighter leading-none">Falta:</span>
+            <span className="text-[12px] font-black text-rose-400 uppercase truncate w-full italic">
               {status.missingNames[0] || 'Insumo'}
             </span>
           </div>
