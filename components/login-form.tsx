@@ -56,7 +56,7 @@ export function LoginForm() {
               <Zap className="w-8 h-8 text-white fill-current" />
             </div>
             <h1 className="text-4xl font-black tracking-tighter text-white uppercase italic leading-none">
-              Bu<span className="text-indigo-500 not-italic">Tic</span>
+              PRA<span className="text-indigo-500 not-italic">NA</span>
             </h1>
             <div className="flex items-center gap-2 mt-3">
               <div className="h-[1px] w-4 bg-slate-700" />
@@ -83,7 +83,7 @@ export function LoginForm() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
                   className="w-full pl-14 pr-6 py-5 bg-slate-950/50 border-2 border-slate-800 rounded-[1.5rem] text-white placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50 transition-all font-bold"
-                  placeholder="admin@butic.com"
+                  placeholder="usuario@prana.com"
                 />
               </div>
             </div>
@@ -130,7 +130,7 @@ export function LoginForm() {
           </form>
           
           <p className="text-center text-slate-600 text-[8px] font-black uppercase tracking-[0.5em] mt-10 opacity-50">
-            v1.0 - Butic Manager
+            v1.0 - prana Manager
           </p>
         </div>
       </div>
